@@ -1,73 +1,76 @@
-# React + TypeScript + Vite
+# PrepPair
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Shared interview prep tracker for the Moniepoint DreamDevs coding bootcamp (18 participants). Each week an admin generates randomised pairings across 5 problems (2 DSA, 2 System Design, 1 Database). Pairs submit collaborative solutions and receive AI feedback.
 
-Currently, two official plugins are available:
+## Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- React 18 + Vite + TypeScript
+- Tailwind CSS + shadcn/ui
+- Supabase (PostgreSQL + Realtime)
+- OpenAI gpt-4o-mini via Vercel serverless function
+- TanStack Query v5
+- Vercel (hosting + API routes)
 
-## React Compiler
+## Setup
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### 1. Install dependencies
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+### 2. Configure environment
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Copy `.env.example` to `.env` and fill in the values:
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+cp .env.example .env
 ```
+
+| Variable | Description |
+|---|---|
+| `VITE_SUPABASE_URL` | Supabase project URL |
+| `VITE_SUPABASE_ANON_KEY` | Supabase anonymous key |
+| `OPENAI_API_KEY` | OpenAI API key (server only) |
+| `NOTION_TOKEN` | Notion integration token (Phase 7) |
+| `NOTION_DATABASE_ID` | Notion database ID (Phase 7) |
+
+### 3. Set up database
+
+Run the contents of `supabase/schema.sql` in your Supabase SQL editor. This creates:
+
+- `participants` table
+- `weekly_pairings` table
+- `app_config` table
+- Update trigger, RLS policies, and replica identity for Realtime
+
+### 4. Enable Realtime
+
+In Supabase Dashboard, go to Database > Replication and enable Realtime for:
+- `participants`
+- `weekly_pairings`
+- `app_config`
+
+### 5. Run locally
+
+```bash
+npm run dev           # Vite dev server (frontend only)
+npm run dev:vercel    # Vercel dev (frontend + API routes)
+```
+
+### 6. Deploy
+
+```bash
+vercel
+```
+
+## Problem Bank
+
+4 weeks, 20 problems total:
+
+| Week | DSA | DSA | System Design | System Design | Database |
+|------|-----|-----|---------------|---------------|----------|
+| 1 | Two Sum | Sliding Window Maximum | URL Shortener | Rate Limiter | Multi-tenant Schema |
+| 2 | Valid Parentheses | Merge Intervals | Notification System | Payment Processing | Query Optimization |
+| 3 | LRU Cache | Binary Tree Level Order | Distributed Cache | Social Activity Feed | ACID Transactions |
+| 4 | Coin Change | Find All Anagrams | Search Autocomplete | Bulk Transfer | Sharding vs Replication |
