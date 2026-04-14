@@ -2,12 +2,93 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { PROBLEMS } from '@/data/problems';
 import { useParticipants } from '@/hooks/useParticipants';
 import { useConfig } from '@/hooks/useConfig';
 import { usePairs } from '@/hooks/usePairs';
+
+const ADMIN_SECRET = import.meta.env.VITE_ADMIN_SECRET as string;
+const STORAGE_KEY = 'preppair_admin_unlocked';
+
+function useAdminGate() {
+  const [unlocked, setUnlocked] = useState(
+    () => sessionStorage.getItem(STORAGE_KEY) === 'true',
+  );
+
+  const unlock = (secret: string): boolean => {
+    if (secret === ADMIN_SECRET) {
+      sessionStorage.setItem(STORAGE_KEY, 'true');
+      setUnlocked(true);
+      return true;
+    }
+    return false;
+  };
+
+  return { unlocked, unlock };
+}
+
+function AdminGate({ onUnlock }: { onUnlock: (secret: string) => boolean }) {
+  const [secret, setSecret] = useState('');
+  const [error, setError] = useState(false);
+
+  const handleSubmit = () => {
+    if (!onUnlock(secret.trim())) {
+      setError(true);
+      setTimeout(() => setError(false), 2000);
+    }
+  };
+
+  return (
+    <div className="relative">
+      {/* Blurred placeholder behind the gate */}
+      <div className="pointer-events-none select-none blur-md" aria-hidden>
+        <div className="space-y-6">
+          <Card><CardContent className="py-8"><div className="h-32 rounded bg-gray-100" /></CardContent></Card>
+          <Card><CardContent className="py-8"><div className="h-24 rounded bg-gray-100" /></CardContent></Card>
+          <Card><CardContent className="py-8"><div className="h-20 rounded bg-gray-100" /></CardContent></Card>
+        </div>
+      </div>
+
+      {/* Overlay */}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <Card className="w-full max-w-sm shadow-lg">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-[#534AB7]/10">
+              <svg className="h-6 w-6 text-[#534AB7]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+              </svg>
+            </div>
+            <CardTitle className="text-lg">Admin Access</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Enter the admin secret to unlock this section
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Input
+              type="password"
+              placeholder="Admin secret…"
+              value={secret}
+              onChange={(e) => setSecret(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+              autoFocus
+            />
+            {error && (
+              <p className="text-xs text-red-500">Incorrect secret. Try again.</p>
+            )}
+            <Button
+              onClick={handleSubmit}
+              disabled={!secret.trim()}
+              className="w-full bg-[#534AB7] hover:bg-[#4339A0]"
+            >
+              Unlock
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
 
 const TYPE_DOT: Record<string, string> = {
   DSA: 'bg-[#534AB7]',
@@ -22,6 +103,16 @@ const DIFF_COLOR: Record<string, string> = {
 };
 
 export function AdminPanel() {
+  const { unlocked, unlock } = useAdminGate();
+
+  if (!unlocked) {
+    return <AdminGate onUnlock={unlock} />;
+  }
+
+  return <AdminContent />;
+}
+
+function AdminContent() {
   const { participants, addParticipant, removeParticipant } = useParticipants();
   const { activeWeek, setActiveWeek } = useConfig();
   const { pairs, generateWeekPairs } = usePairs(activeWeek);

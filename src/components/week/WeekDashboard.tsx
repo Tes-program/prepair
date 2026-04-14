@@ -83,11 +83,13 @@ export function WeekDashboard() {
 
         {hasPairs ? (
           <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="outline" disabled={generating}>
-                {generating ? 'Generating…' : 'Regenerate Pairs'}
-              </Button>
-            </AlertDialogTrigger>
+            <AlertDialogTrigger
+              render={
+                <Button variant="outline" disabled={generating}>
+                  {generating ? 'Generating…' : 'Regenerate Pairs'}
+                </Button>
+              }
+            />
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Regenerate pairs?</AlertDialogTitle>
