@@ -62,12 +62,14 @@ export function usePairs(activeWeek: number) {
     };
   }, [activeWeek, qc, hookId]);
 
-  const generateWeekPairs = async (participants: Participant[]) => {
-    // Delete existing pairs (cascade deletes submissions)
-    await supabase.from('pairs').delete().eq('week_number', activeWeek);
+  const generateWeekPairs = async (
+    participants: Participant[],
+    weekNumber = activeWeek,
+  ) => {
+    await clearWeekPairs(weekNumber);
 
-    const weekProblems = PROBLEMS.filter((p) => p.week === activeWeek);
-    const newPairs = generatePairs(participants, activeWeek);
+    const weekProblems = PROBLEMS.filter((p) => p.week === weekNumber);
+    const newPairs = generatePairs(participants, weekNumber);
 
     for (const pair of newPairs) {
       const { data: inserted, error } = await supabase
@@ -79,7 +81,7 @@ export function usePairs(activeWeek: number) {
 
       const submissionRows = weekProblems.map((p) => ({
         pair_id: inserted.id,
-        week_number: activeWeek,
+        week_number: weekNumber,
         problem_id: p.id,
         status: 'pending' as const,
       }));
@@ -90,8 +92,38 @@ export function usePairs(activeWeek: number) {
       if (subError) throw subError;
     }
 
-    qc.invalidateQueries({ queryKey: ['pairs', activeWeek] });
-    qc.invalidateQueries({ queryKey: ['submissions', activeWeek] });
+    qc.invalidateQueries({ queryKey: ['pairs', weekNumber] });
+    qc.invalidateQueries({ queryKey: ['submissions', weekNumber] });
+    qc.invalidateQueries({ queryKey: ['all-pairs'] });
+    qc.invalidateQueries({ queryKey: ['all-submissions'] });
+  };
+
+  const clearWeekPairs = async (weekNumber: number) => {
+    const { data: weekPairs, error: pairsError } = await supabase
+      .from('pairs')
+      .select('id')
+      .eq('week_number', weekNumber);
+    if (pairsError) throw pairsError;
+
+    const pairIds = (weekPairs ?? []).map((p) => p.id);
+    if (pairIds.length > 0) {
+      const { error: submissionsError } = await supabase
+        .from('pair_submissions')
+        .delete()
+        .in('pair_id', pairIds);
+      if (submissionsError) throw submissionsError;
+    }
+
+    const { error: deletePairsError } = await supabase
+      .from('pairs')
+      .delete()
+      .eq('week_number', weekNumber);
+    if (deletePairsError) throw deletePairsError;
+
+    qc.invalidateQueries({ queryKey: ['pairs', weekNumber] });
+    qc.invalidateQueries({ queryKey: ['submissions', weekNumber] });
+    qc.invalidateQueries({ queryKey: ['all-pairs'] });
+    qc.invalidateQueries({ queryKey: ['all-submissions'] });
   };
 
   const updateSubmission = async (id: string, patch: Partial<PairSubmission>) => {
@@ -201,6 +233,7 @@ export function usePairs(activeWeek: number) {
     submissions,
     isLoading: pairsLoading || subsLoading,
     generateWeekPairs,
+    clearWeekPairs,
     updateSubmission,
     uploadDesignImage,
     requestAssessment,

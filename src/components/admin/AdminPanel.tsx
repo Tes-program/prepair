@@ -1,12 +1,25 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { PROBLEMS } from '@/data/problems';
 import { useParticipants } from '@/hooks/useParticipants';
 import { useConfig } from '@/hooks/useConfig';
 import { usePairs } from '@/hooks/usePairs';
+import { useAllPairs } from '@/hooks/useAllPairs';
 
 const ADMIN_SECRET = import.meta.env.VITE_ADMIN_SECRET as string;
 const STORAGE_KEY = 'preppair_admin_unlocked';
@@ -115,11 +128,13 @@ export function AdminPanel() {
 function AdminContent() {
   const { participants, addParticipant, removeParticipant } = useParticipants();
   const { activeWeek, setActiveWeek } = useConfig();
-  const { pairs, generateWeekPairs } = usePairs(activeWeek);
+  const { generateWeekPairs, clearWeekPairs } = usePairs(activeWeek);
+  const { allPairs, allSubmissions } = useAllPairs();
 
   const [name, setName] = useState('');
-  const [expandedWeek, setExpandedWeek] = useState<number | null>(null);
-  const [generating, setGenerating] = useState(false);
+  const [expandedPairWeek, setExpandedPairWeek] = useState<number | null>(null);
+  const [expandedScheduleWeek, setExpandedScheduleWeek] = useState<number | null>(null);
+  const [loadingWeek, setLoadingWeek] = useState<number | null>(null);
 
   const nameExists = participants.some(
     (p) => p.name.toLowerCase() === name.trim().toLowerCase(),
@@ -132,12 +147,31 @@ function AdminContent() {
     setName('');
   };
 
-  const handleGenerate = async () => {
-    setGenerating(true);
+  const handleGenerate = async (weekNumber: number) => {
+    setLoadingWeek(weekNumber);
     try {
-      await generateWeekPairs(participants);
+      await generateWeekPairs(participants, weekNumber);
     } finally {
-      setGenerating(false);
+      setLoadingWeek(null);
+    }
+  };
+
+  const handleRegenerate = async (weekNumber: number) => {
+    setLoadingWeek(weekNumber);
+    try {
+      await clearWeekPairs(weekNumber);
+      await generateWeekPairs(participants, weekNumber);
+    } finally {
+      setLoadingWeek(null);
+    }
+  };
+
+  const handleClearWeek = async (weekNumber: number) => {
+    setLoadingWeek(weekNumber);
+    try {
+      await clearWeekPairs(weekNumber);
+    } finally {
+      setLoadingWeek(null);
     }
   };
 
@@ -196,47 +230,157 @@ function AdminContent() {
         </CardContent>
       </Card>
 
-      {/* Generate Pairs */}
+      {/* Pair Management */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Generate Pairs — Week {activeWeek}</CardTitle>
+          <CardTitle className="text-lg">Pair Management</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <Button
-            onClick={handleGenerate}
-            disabled={generating || participants.length < 2}
-            className="bg-[#534AB7] hover:bg-[#4339A0]"
-          >
-            {generating
-              ? 'Generating…'
-              : pairs.length > 0
-                ? 'Regenerate Pairs'
-                : 'Generate Pairs'}
-          </Button>
+        <CardContent className="space-y-3">
+          {[1, 2, 3, 4].map((weekNumber) => {
+            const weekPairs = allPairs.filter((p) => p.week_number === weekNumber);
+            const pairIds = new Set(weekPairs.map((p) => p.id));
+            const weekSubmissions = allSubmissions.filter((s) => pairIds.has(s.pair_id));
+            const isExpanded = expandedPairWeek === weekNumber;
+            const hasPairs = weekPairs.length > 0;
+            const isComplete =
+              hasPairs &&
+              weekSubmissions.length > 0 &&
+              weekSubmissions.every((s) => s.status === 'done');
+            const status = !hasPairs ? 'not_generated' : isComplete ? 'complete' : 'in_progress';
 
-          {pairs.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-muted-foreground">
-                {pairs.length} pairs generated
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {pairs.map((pair) => (
-                  <span
-                    key={pair.id}
-                    className="inline-flex items-center rounded-full bg-[#EEEDFE] px-3 py-1.5 text-sm text-[#534AB7]"
-                  >
-                    {pair.member1}
-                    <span className="mx-1.5 text-[#534AB7]/50">×</span>
-                    {pair.member2 === 'TBD' ? (
-                      <span className="text-amber-600">TBD</span>
+            const statusBadge =
+              status === 'not_generated'
+                ? { label: 'Not generated', className: 'bg-gray-100 text-gray-700' }
+                : status === 'complete'
+                  ? { label: 'Complete', className: 'bg-green-100 text-green-700' }
+                  : { label: 'In progress', className: 'bg-amber-100 text-amber-700' };
+
+            const expectedPairs = Math.ceil(participants.length / 2);
+            const weekLoading = loadingWeek === weekNumber;
+
+            return (
+              <div key={weekNumber} className="rounded-lg border">
+                <button
+                  className="flex w-full items-center justify-between px-4 py-3 text-left"
+                  onClick={() => setExpandedPairWeek(isExpanded ? null : weekNumber)}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="font-medium">Week {weekNumber}</span>
+                    <Badge className={cn('border-0 text-xs', statusBadge.className)}>
+                      {statusBadge.label}
+                    </Badge>
+                  </div>
+                  <span className="text-muted-foreground">{isExpanded ? '−' : '+'}</span>
+                </button>
+
+                {isExpanded && (
+                  <div className="space-y-4 border-t px-4 py-3">
+                    {!hasPairs ? (
+                      <div className="space-y-2">
+                        <Button
+                          onClick={() => handleGenerate(weekNumber)}
+                          disabled={participants.length === 0 || weekLoading}
+                          className="bg-[#534AB7] hover:bg-[#4339A0]"
+                        >
+                          {weekLoading ? 'Generating…' : `Generate Week ${weekNumber} Pairs`}
+                        </Button>
+                        <p className="text-xs text-muted-foreground">
+                          {participants.length} participants · {expectedPairs} pairs will be created
+                        </p>
+                      </div>
                     ) : (
-                      pair.member2
+                      <div className="space-y-4">
+                        <AlertDialog>
+                          <AlertDialogTrigger
+                            render={
+                              <Button
+                                variant="outline"
+                                className="border-red-300 text-red-700 hover:bg-red-50 hover:text-red-800"
+                                disabled={participants.length === 0 || weekLoading}
+                              >
+                                {weekLoading ? 'Regenerating…' : `Regenerate Week ${weekNumber} Pairs`}
+                              </Button>
+                            }
+                          />
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Regenerate Week {weekNumber} Pairings?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This will delete all existing pairs, submissions, solutions, and AI assessments for Week {weekNumber}. This cannot be undone.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => handleRegenerate(weekNumber)}
+                                className="bg-red-600 hover:bg-red-700"
+                              >
+                                Yes, regenerate
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+
+                        <div className="border-t pt-3">
+                          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            Danger Zone
+                          </p>
+                          <AlertDialog>
+                            <AlertDialogTrigger
+                              render={
+                                <button
+                                  className="text-sm text-red-600 hover:text-red-700 hover:underline disabled:cursor-not-allowed disabled:text-red-300"
+                                  disabled={weekLoading}
+                                >
+                                  Clear Week {weekNumber} Data
+                                </button>
+                              }
+                            />
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Clear all Week {weekNumber} data?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This permanently deletes all pairs and submissions for Week {weekNumber} including any saved solutions and AI assessments. Use this only to start the week fresh.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => handleClearWeek(weekNumber)}
+                                  className="bg-red-600 hover:bg-red-700"
+                                >
+                                  Clear Week {weekNumber}
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </div>
                     )}
-                  </span>
-                ))}
+
+                    {hasPairs && (
+                      <div className="rounded-md bg-gray-50 p-3">
+                        <p className="mb-2 text-xs font-medium text-muted-foreground">
+                          {weekPairs.length} pairs · {weekSubmissions.length} submissions
+                        </p>
+                        <div className="space-y-1">
+                          {weekPairs.map((pair) => (
+                            <p
+                              key={pair.id}
+                              className="flex items-center gap-2 text-sm text-gray-700"
+                            >
+                              <span className="h-1.5 w-1.5 rounded-full bg-[#534AB7]" />
+                              {pair.member1} &amp; {pair.member2}
+                            </p>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            );
+          })}
         </CardContent>
       </Card>
 
@@ -271,13 +415,13 @@ function AdminContent() {
         <CardContent className="space-y-2">
           {[1, 2, 3, 4].map((w) => {
             const weekProblems = PROBLEMS.filter((p) => p.week === w);
-            const isExpanded = expandedWeek === w;
+            const isExpanded = expandedScheduleWeek === w;
 
             return (
               <div key={w} className="rounded-lg border">
                 <button
                   className="flex w-full items-center justify-between px-4 py-3 text-left"
-                  onClick={() => setExpandedWeek(isExpanded ? null : w)}
+                  onClick={() => setExpandedScheduleWeek(isExpanded ? null : w)}
                 >
                   <div className="flex items-center gap-3">
                     <span className="font-medium">Week {w}</span>
